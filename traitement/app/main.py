@@ -1,6 +1,6 @@
 from fastAPI import FastAPI
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 @app.get("/")
 async def root():

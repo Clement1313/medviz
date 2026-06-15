@@ -42,6 +42,12 @@ Install it once after cloning the repository:
 uvx pre-commit install
 ```
 
+manually reformat all files (use on project root)
+
+```bash
+uvx pre-commit run --all-files
+```
+
 Run it manually on all files:
 
 ```bash

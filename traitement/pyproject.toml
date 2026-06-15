@@ -1,0 +1,9 @@
+[project]
+name = "traitement"
+version = "0.1.0"
+description = "traitement service dependencies"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.136.3",
+]

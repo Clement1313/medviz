@@ -50,7 +50,7 @@ def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
         La matrice de confusion du modèle (VP, FP, FN, VN) sur tout le dataset
     """
     tp = fp = fn = tn = 0
-    for pred, gt in zip(mask_gt_lst, mask_pred_lst):
+    for gt,pred in zip(mask_gt_lst, mask_pred_lst):
         countPred = np.count_nonzero(pred)
         countGt = np.count_nonzero(gt)
         if countPred == 0 and countGt == 0:
@@ -79,7 +79,7 @@ def sensitivity(tp: int, fn: int) -> float:
     Returns:
         SN = TP / (TP + FN)
     """
-    # TODO
+    return float(tp) / float(tp + fn)
 
 
 def specificity(tn: int, fp: int) -> float:
@@ -94,7 +94,7 @@ def specificity(tn: int, fp: int) -> float:
     Returns:
         SP = TN / (TN + FP)
     """
-    # TODO
+    return float(tn) / float(tn + fp)
 
 
 def false_positive_rate(fp: int, tn: int) -> float:
@@ -108,8 +108,7 @@ def false_positive_rate(fp: int, tn: int) -> float:
     Returns:
         FPR = FP / (FP + TN)
     """
-    # TODO
-
+    return float(fp) / float(fp + tn)
 
 def false_negative_rate(fn: int, tp: int) -> float:
     """
@@ -122,7 +121,7 @@ def false_negative_rate(fn: int, tp: int) -> float:
     Returns:
         FNR = FN / (FN + TP)
     """
-    # TODO
+    return float(fn) / float(fn + tp)
 
 
 def weighted_error_rate(fpr: float, fnr: float, R: float) -> float:
@@ -140,14 +139,48 @@ def weighted_error_rate(fpr: float, fnr: float, R: float) -> float:
     Returns:
         WER(R) = (FPR + R * FNR) / (1 + R)
     """
-    # TODO
+    return (fpr + R  * fnr ) / (1 + R)
 
 
-def roc_curve():
+
+def roc_curve_(labels:np.ndarray,ious:np.ndarray,threshold:float):
+    tp = fp = fn = tn = 0
+    for label,iou in zip(labels, ious):
+        if iou >= threshold:
+            if label == 1:
+                tp += 1
+            else:
+                fp += 1
+        else:
+            if label == 1:
+                fn += 1
+            else:
+                tn += 1
+    return tp, fp, fn, tn
+
+
+
+def roc_curve(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray,number_thresholds:int):
     """
-    // 
+    Retourne la ROC curve
+    Args:
+        mask_gt_lst: liste de masque ground truth
+        mask_pred_lst : liste de masque prédit
+        number_thresholds: nombre de seuil à tester
+    Returns:
+        les points de la courbe (threshold,FPR,TPR)
     """
     # TODO
+    labels = np.array([1 if np.count_nonzero(gt) else 0 for gt in mask_gt_lst])
+    ious = np.array([compute_iou(gt,pred) for gt,pred in zip(mask_gt_lst,mask_pred_lst)])
+    thresholds = np.linspace(0,1,number_thresholds)
+    result = []
 
+    for threshold in thresholds:
+        tp, fp, fn, tn = roc_curve_(labels,ious,threshold)
+        FPR  =false_positive_rate(fp,tn)
+        TPR = sensitivity(tp,fn)
+        result.append((threshold,FPR,TPR))
+    return result
 
 

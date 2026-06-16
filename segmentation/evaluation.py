@@ -1,4 +1,5 @@
 import numpy as np
+from skimage import io
 
 IOU_THRESHOLD = 0.5
 
@@ -12,8 +13,7 @@ def load_mask(path: str) -> np.ndarray:
     Returns:
         mask: tableau d'entiers, un label par pixel
     """
-    # TODO
-    return
+    return io.imread(path, as_gray=True).astype(np.uint8)
 
 
 def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
@@ -27,36 +27,44 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     Returns:
         score IoU
     """
-    # TODO
-    return
+    intersection = mask_gt & mask_pred
+    union = mask_gt | mask_pred
+    i_rate = np.count_nonzero(intersection)
+    u_rate = np.count_nonzero(union)
+    if u_rate == 0:
+        if i_rate == 0:
+            return 1.0
+        else:
+            return 1/i_rate # TODO: à ajuster en fonction du nombre de pixels faux positif on veux accepter
+    return i_rate/u_rate
 
 def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
-        """
-        Calcule la matrice de confusion 
+    """
+    Calcule la matrice de confusion 
 
-        Args:
-            mask_gt_lst: liste de masque ground truth
-            mask_pred_lst : liste de masque prédit
+    Args:
+        mask_gt_lst: liste de masque ground truth
+        mask_pred_lst : liste de masque prédit
 
-        Returns:
-            La matrice de confusion du modèle (VP, FP, FN, VN) sur tout le dataset
-        """
-        tp = fp = fn = tn = 0
-        for pred, gt in zip(mask_gt_lst, mask_pred_lst):
-            countPred = np.count_nonzero(pred)
-            countGt = np.count_nonzero(gt)
-            if countPred == 0 and countGt == 0:
-                tn += 1
-            elif countPred == 0:
-                fn += 1
-            elif countGt == 0:
-                fp += 1
-            elif compute_iou(pred, gt) >= IOU_THRESHOLD:
-                tp += 1
-            else:
-                fp += 1
-                fn += 1
-        return tp, fp, fn, tn
+    Returns:
+        La matrice de confusion du modèle (VP, FP, FN, VN) sur tout le dataset
+    """
+    tp = fp = fn = tn = 0
+    for pred, gt in zip(mask_gt_lst, mask_pred_lst):
+        countPred = np.count_nonzero(pred)
+        countGt = np.count_nonzero(gt)
+        if countPred == 0 and countGt == 0:
+            tn += 1
+        elif countPred == 0:
+            fn += 1
+        elif countGt == 0:
+            fp += 1
+        elif compute_iou(pred, gt) >= IOU_THRESHOLD:
+            tp += 1
+        else:
+            fp += 1
+            fn += 1
+    return tp, fp, fn, tn
 
 
 def sensitivity(tp: int, fn: int) -> float:

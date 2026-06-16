@@ -1,5 +1,7 @@
 import numpy as np
 
+IOU_THRESHOLD = 0.5
+
 def load_mask(path: str) -> np.ndarray:
     """
     Charge un masque de segmentation ground truth de la DB

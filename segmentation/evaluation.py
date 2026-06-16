@@ -32,10 +32,7 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     i_rate = np.count_nonzero(intersection)
     u_rate = np.count_nonzero(union)
     if u_rate == 0:
-        if i_rate == 0:
-            return 1.0
-        else:
-            return 1/i_rate # TODO: à ajuster en fonction du nombre de pixels faux positif on veux accepter
+        return 1.0
     return i_rate/u_rate
 
 def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
@@ -55,12 +52,12 @@ def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
         countGt = np.count_nonzero(gt)
         if countPred == 0 and countGt == 0:
             tn += 1
+        elif compute_iou(pred, gt) >= IOU_THRESHOLD:
+            tp += 1
         elif countPred == 0:
             fn += 1
         elif countGt == 0:
             fp += 1
-        elif compute_iou(pred, gt) >= IOU_THRESHOLD:
-            tp += 1
         else:
             fp += 1
             fn += 1

@@ -57,3 +57,89 @@ def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
                 fp += 1
                 fn += 1
         return tp, fp, fn, tn
+
+
+def sensitivity(tp: int, fn: int) -> float:
+    """
+    Calcule la sensibilité (taux de vrais positifs, TPR) selon le protocole DIARETDB1.
+    Proportion d'images anormales correctement classées comme anormales.
+
+    Args:
+        tp: nombre d'images anormales détectées comme anormales
+        fn: nombre d'images anormales détectées comme normales
+
+    Returns:
+        SN = TP / (TP + FN)
+    """
+    # TODO
+
+
+def specificity(tn: int, fp: int) -> float:
+    """
+    Calcule la spécificité (taux de vrais négatifs, TNR) selon le protocole DIARETDB1.
+    Proportion d'images normales correctement classées comme normales.
+
+    Args:
+        tn: nombre d'images normales détectées comme normales
+        fp: nombre d'images normales détectées comme anormales
+
+    Returns:
+        SP = TN / (TN + FP)
+    """
+    # TODO
+
+
+def false_positive_rate(fp: int, tn: int) -> float:
+    """
+    Calcule le taux de faux positifs (FPR = 1 - spécificité).
+
+    Args:
+        fp: nombre d'images normales détectées comme anormales
+        tn: nombre d'images normales détectées comme normales
+
+    Returns:
+        FPR = FP / (FP + TN)
+    """
+    # TODO
+
+
+def false_negative_rate(fn: int, tp: int) -> float:
+    """
+    Calcule le taux de faux négatifs (FNR = 1 - sensibilité).
+
+    Args:
+        fn: nombre d'images anormales détectées comme normales
+        tp: nombre d'images anormales détectées comme anormales
+
+    Returns:
+        FNR = FN / (FN + TP)
+    """
+    # TODO
+
+
+def weighted_error_rate(fpr: float, fnr: float, R: float) -> float:
+    """
+    Calcule le taux d'erreur pondéré (WER) selon le protocole DIARETDB1.
+    Le protocole DIARETDB1 trois valeurs : R=0.1, R=1, R=10
+    Nous choisirons R=10 car nous voulons donner du poids au faux negatif
+    pour ne pas rater de potentiels exudats.
+
+    Args:
+        fpr: taux de faux positifs
+        fnr: taux de faux négatifs
+        R:   ratio de coût entre FNR et FPR
+
+    Returns:
+        WER(R) = (FPR + R * FNR) / (1 + R)
+    """
+    # TODO
+
+
+def roc_curve():
+    """
+    // 
+    """
+    # TODO
+
+
+

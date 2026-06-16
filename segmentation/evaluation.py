@@ -167,7 +167,6 @@ def roc_curve(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray,number_threshol
     Returns:
         les points de la courbe (threshold,FPR,TPR)
     """
-    # TODO
     labels = np.array([1 if np.count_nonzero(gt) else 0 for gt in mask_gt_lst])
     ious = np.array([compute_iou(gt,pred) for gt,pred in zip(mask_gt_lst,mask_pred_lst)])
     thresholds = np.linspace(0,1,number_thresholds)

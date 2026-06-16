@@ -1,4 +1,5 @@
 import numpy as np
+from skimage import io
 
 IOU_THRESHOLD = 0.5
 
@@ -12,8 +13,7 @@ def load_mask(path: str) -> np.ndarray:
     Returns:
         mask: tableau d'entiers, un label par pixel
     """
-    # TODO
-    return
+    return io.imread(path, as_gray=True).astype(np.uint8)
 
 
 def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
@@ -27,8 +27,16 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     Returns:
         score IoU
     """
-    # TODO
-    return
+    intersection = mask_gt & mask_pred
+    union = mask_gt | mask_pred
+    i_rate = np.count_nonzero(intersection)
+    u_rate = np.count_nonzero(union)
+    if u_rate == 0:
+        if i_rate == 0:
+            return 1.0
+        else:
+            return 1/i_rate # TODO: à ajuster en fonction du nombre de pixels faux positif on veux accepter
+    return i_rate/u_rate
 
 def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
     """

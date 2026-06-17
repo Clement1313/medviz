@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "dash>=2.16",
+    "requests>=2.32.5",
 ]
 
 [tool.uv]

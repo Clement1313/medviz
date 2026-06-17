@@ -16,6 +16,7 @@ La détection est simulée (mêmes données que la maquette d'origine) ; remplac
 import base64
 import time
 from datetime import datetime
+import requests
 
 from dash import (
     Dash, dcc, html, Input, Output, State, ctx, ALL, no_update,
@@ -49,6 +50,17 @@ ANALYSIS_STEPS = [
 SEVERITY_COLORS = {"faible": "#facc15", "modéré": "#f97316", "élevé": "#ef4444"}
 _SEV_WEIGHT = {"élevé": 3, "modéré": 2, "faible": 1}
 
+
+API_URL = "http://127.0.0.1:8000"
+
+def call_analyze_api(img_data_uri, filename):
+    header, b64data = img_data_uri.split(",", 1)
+    raw_bytes = base64.b64decode(b64data)
+
+    files = {"file": (filename, raw_bytes, "image/png")}
+    response = requests.post(f"{API_URL}/analyze", files=files)
+    response.raise_for_status()
+    return response.json()["results"]
 
 def sort_results(data):
     return sorted(data, key=lambda r: (-_SEV_WEIGHT[r["severity"]], -r["confidence"]))
@@ -394,7 +406,12 @@ def tick(_n, a, img, hist):
     n = len(ANALYSIS_STEPS)
     step = a["step"] + 1
     if step >= n:
-        results = sort_results(MOCK_EXUDATES)
+        try:
+            api_results = call_analyze_api(img["src"], img["name"])
+            results = sort_results(api_results)
+        except requests.RequestException as e:
+            print(f"Erreur API: {e}")
+            results = []
         entry = {
             "id": str(time.time()),
             "src": img["src"], "name": img["name"],

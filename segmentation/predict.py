@@ -31,7 +31,7 @@ def cut_tree(tree, labels: np.ndarray) -> np.ndarray:
     Returns:
         mask: image segmentée (H, W) avec un label par pixel
     """
-    parents  = tree.parents()
+    parents = tree.parents()
 
     propagated = labels.copy()
     for node in tree.root_to_leaves_iterator():
@@ -58,6 +58,6 @@ def get_connected_component_masks(mask: np.ndarray) -> list:
     labels_unique = np.unique(mask)
     masks = []
     for label in labels_unique:
-        binary_mask = (mask == label)
+        binary_mask = mask == label
         masks.append((label, binary_mask))
     return masks

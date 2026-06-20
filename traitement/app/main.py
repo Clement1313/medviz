@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import get_db, AnalysisRecord
+from .database import get_db, AnalysisRecord
 from fastapi.responses import FileResponse
 
 

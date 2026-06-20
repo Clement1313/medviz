@@ -126,6 +126,11 @@ API_URL = "http://127.0.0.1:8000"
 
 
 def call_analyze_api(img_data_uri, filename):
+    if not img_data_uri or "," not in img_data_uri:
+        raise ValueError(
+            f"Format d'image invalide: {img_data_uri[:50] if img_data_uri else None}"
+        )
+
     header, b64data = img_data_uri.split(",", 1)
     raw_bytes = base64.b64decode(b64data)
 
@@ -242,6 +247,23 @@ app = Dash(__name__, title="RetinaScan AI", suppress_callback_exceptions=True)
 server = app.server
 
 
+@app.callback(
+    Output("state-history", "data"),
+    Input("url", "pathname"),
+    Input("btn-history", "n_clicks"),
+)
+def load_history(_pathname, _n):  # ✅ deux paramètres
+    try:
+        response = requests.get(f"{API_URL}/history")
+        response.raise_for_status()
+        data = response.json()
+        print(f">>> Historique chargé: {len(data)} entrées")
+        return data
+    except requests.RequestException as e:
+        print(f">>> Erreur chargement historique: {e}")
+        return []
+
+
 def dropzone_children():
     return html.Div(
         className="dz-inner",
@@ -273,6 +295,7 @@ app.layout = html.Div(
     className="root",
     children=[
         # ----- stores -----
+        dcc.Location(id="url", refresh=False),
         dcc.Store(id="state-image"),  # {"src":..., "name":...} | None
         dcc.Store(id="state-results"),  # [ ... ] | None
         dcc.Store(id="state-history", data=[]),
@@ -540,8 +563,8 @@ def tick(_n, a, img, hist):
         try:
             api_results = call_analyze_api(img["src"], img["name"])
             results = sort_results(api_results)
-        except requests.RequestException as e:
-            print(f"Erreur API: {e}")
+        except (requests.RequestException, ValueError) as e:
+            print(f">>> ERREUR: {e}")
             results = []
         entry = {
             "id": str(time.time()),
@@ -755,8 +778,10 @@ def render_history(hist):
             html.Div(
                 [
                     html.Div(
-                        html.Img(src=item["src"], className="hist-thumb-img"),
-                        className="hist-thumb",
+                        html.Img(
+                            src=f"{API_URL}/history/{item['id']}/image",
+                            className="hist-thumb-img",
+                        )
                     ),
                     html.Div(
                         [
@@ -814,7 +839,8 @@ def restore_history(clicks, hist):
     item = next((h for h in (hist or []) if h["id"] == tid), None)
     if not item:
         raise PreventUpdate
-    return {"src": item["src"], "name": item["name"]}, item["results"], 1, False
+    img_url = f"{API_URL}/history/{item['id']}/image"
+    return {"src": img_url, "name": item["name"]}, item["results"], 1, False
 
 
 if __name__ == "__main__":

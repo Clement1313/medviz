@@ -9,3 +9,8 @@ traitement/
 ├── pyproject.toml      # Dépendances (fastapi)
 └── uv.lock
 ```
+
+## Lancer le back
+```
+uv run fastapi dev app/main.py --port 8000
+```

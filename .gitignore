@@ -1,1 +1,3 @@
 __pycache__
+traitement/uploads/*
+traitement/retinascan.db

@@ -1,0 +1,89 @@
+name: MedViz CI-CD
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Check front
+        working-directory: front
+        run: |
+          uv sync
+          uv run python -c "import app; print('front ok')"
+
+      - name: Check data
+        working-directory: data
+        run: |
+          uv sync
+          uv run python -c "from app.main import app; print('data ok')"
+
+      - name: Check traitement
+        working-directory: traitement
+        run: |
+          uv sync
+          uv run python -c "from app.main import app; print('traitement ok')" 
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Lint front
+        working-directory: front
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Lint data
+        working-directory: data
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Lint traitement
+        working-directory: traitement
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+    
+  main-pr-source:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Only dev can be merged into main
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "Only the dev branch can open a pull request into main."
+            echo "Current source branch: ${{ github.head_ref }}"
+            exit 1
+          fi
+
+    

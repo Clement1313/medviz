@@ -14,6 +14,7 @@ La détection est simulée (mêmes données que la maquette d'origine) ; remplac
 """
 
 import base64
+import os
 import time
 from datetime import datetime
 import requests
@@ -122,7 +123,8 @@ SEVERITY_COLORS = {"faible": "#facc15", "modéré": "#f97316", "élevé": "#ef44
 _SEV_WEIGHT = {"élevé": 3, "modéré": 2, "faible": 1}
 
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
+PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", API_URL).rstrip("/")
 
 
 def call_analyze_api(img_data_uri, filename):
@@ -839,9 +841,9 @@ def restore_history(clicks, hist):
     item = next((h for h in (hist or []) if h["id"] == tid), None)
     if not item:
         raise PreventUpdate
-    img_url = f"{API_URL}/history/{item['id']}/image"
+    img_url = f"{PUBLIC_API_URL}/history/{item['id']}/image"
     return {"src": img_url, "name": item["name"]}, item["results"], 1, False
 
 
 if __name__ == "__main__":
-    app.run(debug=False, port=8050)
+    app.run(debug=False, host="0.0.0.0", port=int(os.getenv("PORT", "8050")))

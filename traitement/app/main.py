@@ -1,10 +1,13 @@
+import os
 import uuid
 from pathlib import Path
-from fastapi import FastAPI, File, UploadFile, Depends
+
+from fastapi import Depends, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from .database import get_db, AnalysisRecord
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from .database import get_db, AnalysisRecord
 
 
 app = FastAPI()
@@ -16,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 

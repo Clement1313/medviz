@@ -124,10 +124,12 @@ _SEV_WEIGHT = {"élevé": 3, "modéré": 2, "faible": 1}
 
 API_URL = "http://127.0.0.1:8000"
 
+
 def call_analyze_api(img_data_uri, filename):
     if not img_data_uri or "," not in img_data_uri:
-        raise ValueError(f"Format d'image invalide: {img_data_uri[:50] if img_data_uri else None}")
-
+        raise ValueError(
+            f"Format d'image invalide: {img_data_uri[:50] if img_data_uri else None}"
+        )
 
     header, b64data = img_data_uri.split(",", 1)
     raw_bytes = base64.b64decode(b64data)
@@ -244,6 +246,7 @@ C = {
 app = Dash(__name__, title="RetinaScan AI", suppress_callback_exceptions=True)
 server = app.server
 
+
 @app.callback(
     Output("state-history", "data"),
     Input("url", "pathname"),
@@ -259,6 +262,7 @@ def load_history(_pathname, _n):  # ✅ deux paramètres
     except requests.RequestException as e:
         print(f">>> Erreur chargement historique: {e}")
         return []
+
 
 def dropzone_children():
     return html.Div(
@@ -292,8 +296,8 @@ app.layout = html.Div(
     children=[
         # ----- stores -----
         dcc.Location(id="url", refresh=False),
-        dcc.Store(id="state-image"),        # {"src":..., "name":...} | None
-        dcc.Store(id="state-results"),      # [ ... ] | None
+        dcc.Store(id="state-image"),  # {"src":..., "name":...} | None
+        dcc.Store(id="state-results"),  # [ ... ] | None
         dcc.Store(id="state-history", data=[]),
         dcc.Store(id="state-zoom", data=1),
         dcc.Store(
@@ -774,8 +778,11 @@ def render_history(hist):
             html.Div(
                 [
                     html.Div(
-                        html.Img(src=f"{API_URL}/history/{item['id']}/image", className="hist-thumb-img")
-                        ),
+                        html.Img(
+                            src=f"{API_URL}/history/{item['id']}/image",
+                            className="hist-thumb-img",
+                        )
+                    ),
                     html.Div(
                         [
                             html.Div(
@@ -834,6 +841,7 @@ def restore_history(clicks, hist):
         raise PreventUpdate
     img_url = f"{API_URL}/history/{item['id']}/image"
     return {"src": img_url, "name": item["name"]}, item["results"], 1, False
+
 
 if __name__ == "__main__":
     app.run(debug=False, port=8050)

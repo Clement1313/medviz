@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, Integer, JSON, DateTime
+from sqlalchemy import create_engine, Column, String, JSON, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 
@@ -12,10 +12,10 @@ Base = declarative_base()
 class AnalysisRecord(Base):
     __tablename__ = "analyses"
 
-    id = Column(String, primary_key=True)       # uuid
-    filename = Column(String, nullable=False)    # nom original
+    id = Column(String, primary_key=True)  # uuid
+    filename = Column(String, nullable=False)  # nom original
     image_path = Column(String, nullable=False)  # chemin sur disque
-    results = Column(JSON, nullable=False)       # liste d'exsudats
+    results = Column(JSON, nullable=False)  # liste d'exsudats
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

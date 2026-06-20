@@ -5,9 +5,9 @@ description = "traitement service dependencies"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.136.3",
+    "fastapi[standard]>=0.136.3",
+    "ruff>=0.15.18",
 ]
-
 [dependency-groups]
 dev = [
     "ruff>=0.15.17",

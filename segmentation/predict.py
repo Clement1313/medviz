@@ -2,18 +2,24 @@ import higra as hg
 import numpy as np
 
 
-def predict(attributes: np.ndarray, clf) -> np.ndarray:
+def predict(attributes: np.ndarray, clf, threshold: float = 0.5, max_area: int = 5000, min_area: int = 4000) -> np.ndarray:
     """
     classifie chaque noeud
 
     Args:
         attributes: matrice de features (nb_noeuds, nb_features)
         clf: classifieur sklearn entraîné
-
+        threshold: seuil de probabilité pour la classe exsudat
+        max_area: aire max en pixels
+        min_area: aire min en pixels
     Returns:
-        labels: tableau de booleens
+        labels: tableau d'entiers
     """
-    return clf.predict(attributes)
+    proba = clf.predict_proba(attributes)[:, 1]
+    labels = (proba >= threshold).astype(np.int32)
+    labels[attributes[:, 0] > max_area] = 0
+    labels[attributes[:, 0] < min_area] = 0
+    return labels
 
 
 def cut_tree(tree, labels: np.ndarray) -> np.ndarray:

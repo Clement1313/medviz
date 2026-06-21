@@ -2,18 +2,24 @@ import higra as hg
 import numpy as np
 
 
-def predict(attributes: np.ndarray, clf) -> np.ndarray:
+def predict(attributes: np.ndarray, clf, threshold: float = 0.5, max_area: int = 5000, min_area: int = 4000) -> np.ndarray:
     """
     classifie chaque noeud
 
     Args:
         attributes: matrice de features (nb_noeuds, nb_features)
         clf: classifieur sklearn entraîné
-
+        threshold: seuil de probabilité pour la classe exsudat
+        max_area: aire max en pixels
+        min_area: aire min en pixels
     Returns:
-        labels: tableau de booleens
+        labels: tableau d'entiers
     """
-    return clf.predict(attributes)
+    proba = clf.predict_proba(attributes)[:, 1]
+    labels = (proba >= threshold).astype(np.int32)
+    labels[attributes[:, 0] > max_area] = 0
+    labels[attributes[:, 0] < min_area] = 0
+    return labels
 
 
 def cut_tree(tree, labels: np.ndarray) -> np.ndarray:
@@ -31,7 +37,7 @@ def cut_tree(tree, labels: np.ndarray) -> np.ndarray:
     Returns:
         mask: image segmentée (H, W) avec un label par pixel
     """
-    parents  = tree.parents()
+    parents = tree.parents()
 
     propagated = labels.copy()
     for node in tree.root_to_leaves_iterator():
@@ -58,6 +64,6 @@ def get_connected_component_masks(mask: np.ndarray) -> list:
     labels_unique = np.unique(mask)
     masks = []
     for label in labels_unique:
-        binary_mask = (mask == label)
+        binary_mask = mask == label
         masks.append((label, binary_mask))
     return masks

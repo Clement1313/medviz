@@ -1,19 +1,79 @@
+import xml.etree.ElementTree as ET
+
 import numpy as np
-from skimage import io
+from skimage import draw
 
 IOU_THRESHOLD = 0.5
 
-def load_mask(path: str) -> np.ndarray:
+# taille standard des images DiaRetDB1 (hauteur, largeur)
+DIARETDB1_SHAPE = (1152, 1500)
+
+
+def _coords(text: str) -> tuple:
+    """'x,y' (colonne,ligne) -> (x, y) entiers"""
+    x, y = text.split(",")
+    return int(x), int(y)
+
+
+def _region_to_indices(region, shape: tuple) -> tuple:
     """
-    Charge un masque de segmentation ground truth de la DB
+    Rasterise une region (cercle / ellipse / polygone) en indices (rr, cc).
+    Le type de forme depend du fichier, on dispatch sur le tag.
+    """
+    tag = region.tag
+    if tag == "circleregion":
+        cx, cy = _coords(region.find("centroid/coords2d").text)
+        r = int(region.find("radius").text)
+        return draw.disk((cy, cx), r, shape=shape)
+
+    if tag == "ellipseregion":
+        cx, cy = _coords(region.find("centroid/coords2d").text)
+        rx = int(region.find('radius[@direction="x"]').text)
+        ry = int(region.find('radius[@direction="y"]').text)
+        angle = region.find("angle")
+        rotation = np.deg2rad(float(angle.text)) if angle is not None else 0.0
+        return draw.ellipse(cy, cx, ry, rx, shape=shape, rotation=rotation)
+
+    if tag == "polygonregion":
+        # coords2d enfants directs = sommets (le centroid est sous <centroid>)
+        pts = [_coords(c.text) for c in region.findall("coords2d")]
+        rows = [y for _, y in pts]
+        cols = [x for x, _ in pts]
+        return draw.polygon(rows, cols, shape=shape)
+
+    raise ValueError(f"Type de region non gere : {tag}")
+
+
+def load_mask(path: str, shape: tuple = DIARETDB1_SHAPE) -> np.ndarray:
+    """
+    Charge le ground truth depuis un XML d'annotation DiaRetDB1 et rasterise
+    TOUS les marquages dont le markingtype contient 'exudates'
+    (Hard_exudates / Soft_exudates). Chaque exsudat recoit un label entier
+    distinct (1, 2, 3, ...).
 
     Args:
-        path: chemin vers le fichier masque
+        path:  chemin vers le fichier XML d'annotation
+        shape: (hauteur, largeur) du masque a produire
 
     Returns:
-        mask: tableau d'entiers, un label par pixel
+        mask: (H, W) int32, un label par exsudat, 0 = fond
     """
-    return io.imread(path, as_gray=True).astype(np.uint8)
+    root = ET.parse(path).getroot()
+    mask = np.zeros(shape, dtype=np.int32)
+
+    label = 0
+    for marking in root.iter("marking"):
+        mtype = marking.find("markingtype")
+        if mtype is None or mtype.text is None or "exudates" not in mtype.text.lower():
+            continue
+
+        label += 1
+        # la region est le 1er enfant dont le tag se termine par 'region'
+        region = next(c for c in marking if c.tag.endswith("region"))
+        rr, cc = _region_to_indices(region, shape)
+        mask[rr, cc] = label
+
+    return mask
 
 
 def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
@@ -27,13 +87,14 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     Returns:
         score IoU
     """
-    intersection = mask_gt & mask_pred
-    union = mask_gt | mask_pred
+    intersection = (mask_gt > 0) & (mask_pred > 0)
+    union = (mask_gt > 0) | (mask_pred > 0)
     i_rate = np.count_nonzero(intersection)
     u_rate = np.count_nonzero(union)
     if u_rate == 0:
         return 1.0
-    return i_rate/u_rate
+    return i_rate / u_rate
+
 
 def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
     """
@@ -47,7 +108,7 @@ def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
         La matrice de confusion du modèle (VP, FP, FN, VN) sur tout le dataset
     """
     tp = fp = fn = tn = 0
-    for gt,pred in zip(mask_gt_lst, mask_pred_lst):
+    for gt, pred in zip(mask_gt_lst, mask_pred_lst):
         countPred = np.count_nonzero(pred)
         countGt = np.count_nonzero(gt)
         if countPred == 0 and countGt == 0:
@@ -107,6 +168,7 @@ def false_positive_rate(fp: int, tn: int) -> float:
     """
     return float(fp) / float(fp + tn)
 
+
 def false_negative_rate(fn: int, tp: int) -> float:
     """
     Calcule le taux de faux négatifs (FNR = 1 - sensibilité).
@@ -136,13 +198,12 @@ def weighted_error_rate(fpr: float, fnr: float, R: float) -> float:
     Returns:
         WER(R) = (FPR + R * FNR) / (1 + R)
     """
-    return (fpr + R  * fnr ) / (1 + R)
+    return (fpr + R * fnr) / (1 + R)
 
 
-
-def roc_curve_(labels:np.ndarray,ious:np.ndarray,threshold:float):
+def roc_curve_(labels: np.ndarray, ious: np.ndarray, threshold: float):
     tp = fp = fn = tn = 0
-    for label,iou in zip(labels, ious):
+    for label, iou in zip(labels, ious):
         if iou >= threshold:
             if label == 1:
                 tp += 1
@@ -156,8 +217,9 @@ def roc_curve_(labels:np.ndarray,ious:np.ndarray,threshold:float):
     return tp, fp, fn, tn
 
 
-
-def roc_curve(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray,number_thresholds:int):
+def roc_curve(
+    mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray, number_thresholds: int
+):
     """
     Retourne la ROC curve
     Args:
@@ -168,15 +230,15 @@ def roc_curve(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray,number_threshol
         les points de la courbe (threshold,FPR,TPR)
     """
     labels = np.array([1 if np.count_nonzero(gt) else 0 for gt in mask_gt_lst])
-    ious = np.array([compute_iou(gt,pred) for gt,pred in zip(mask_gt_lst,mask_pred_lst)])
-    thresholds = np.linspace(0,1,number_thresholds)
+    ious = np.array(
+        [compute_iou(gt, pred) for gt, pred in zip(mask_gt_lst, mask_pred_lst)]
+    )
+    thresholds = np.linspace(0, 1, number_thresholds)
     result = []
 
     for threshold in thresholds:
-        tp, fp, fn, tn = roc_curve_(labels,ious,threshold)
-        FPR  =false_positive_rate(fp,tn)
-        TPR = sensitivity(tp,fn)
-        result.append((threshold,FPR,TPR))
+        tp, fp, fn, tn = roc_curve_(labels, ious, threshold)
+        FPR = false_positive_rate(fp, tn)
+        TPR = sensitivity(tp, fn)
+        result.append((threshold, FPR, TPR))
     return result
-
-

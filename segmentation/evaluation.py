@@ -3,8 +3,6 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from skimage import draw
 
-IOU_THRESHOLD = 0.5
-
 # taille standard des images DiaRetDB1 (hauteur, largeur)
 DIARETDB1_SHAPE = (1152, 1500)
 
@@ -96,31 +94,36 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     return i_rate / u_rate
 
 
-def confusionCounts(mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray):
+def confusionCounts(mask_gt_lst: list, mask_pred_lst: list, min_pixels: int = 1):
     """
-    Calcule la matrice de confusion
+    Calcule la matrice de confusion au niveau IMAGE, selon le protocole
+    DiaRetDB1 (evaluation image-based, pas de recouvrement spatial).
+
+    Une image est anormale (cote GT) si elle contient au moins un marquage
+    d'exsudat. La methode classe une image comme anormale si son score
+    (= nombre de pixels predits exsudat) atteint min_pixels. Aucun appariement
+    detection<->GT n'est fait : on compare juste les deux labels presence/absence.
 
     Args:
-        mask_gt_lst: liste de masque ground truth
-        mask_pred_lst : liste de masque prédit
+        mask_gt_lst: liste de masques ground truth
+        mask_pred_lst: liste de masques predits
+        min_pixels: seuil sur le score-image (nb de pixels flaggés) au-dessus
+            duquel la methode declare l'image anormale
 
     Returns:
         La matrice de confusion du modèle (VP, FP, FN, VN) sur tout le dataset
     """
     tp = fp = fn = tn = 0
     for gt, pred in zip(mask_gt_lst, mask_pred_lst):
-        countPred = np.count_nonzero(pred)
-        countGt = np.count_nonzero(gt)
-        if countPred == 0 and countGt == 0:
-            tn += 1
-        elif compute_iou(pred, gt) >= IOU_THRESHOLD:
+        gt_abnormal = np.count_nonzero(gt) > 0
+        pred_abnormal = np.count_nonzero(pred) >= min_pixels
+        if gt_abnormal and pred_abnormal:
             tp += 1
-        elif countPred == 0:
-            fn += 1
-        elif countGt == 0:
+        elif not gt_abnormal and not pred_abnormal:
+            tn += 1
+        elif pred_abnormal:  # GT normale, methode anormale
             fp += 1
-        else:
-            fp += 1
+        else:  # GT anormale, methode normale
             fn += 1
     return tp, fp, fn, tn
 
@@ -201,10 +204,10 @@ def weighted_error_rate(fpr: float, fnr: float, R: float) -> float:
     return (fpr + R * fnr) / (1 + R)
 
 
-def roc_curve_(labels: np.ndarray, ious: np.ndarray, threshold: float):
+def roc_curve_(labels: np.ndarray, scores: np.ndarray, threshold: float):
     tp = fp = fn = tn = 0
-    for label, iou in zip(labels, ious):
-        if iou >= threshold:
+    for label, score in zip(labels, scores):
+        if score >= threshold:  # image declaree anormale par la methode
             if label == 1:
                 tp += 1
             else:
@@ -217,11 +220,14 @@ def roc_curve_(labels: np.ndarray, ious: np.ndarray, threshold: float):
     return tp, fp, fn, tn
 
 
-def roc_curve(
-    mask_gt_lst: np.ndarray, mask_pred_lst: np.ndarray, number_thresholds: int
-):
+def roc_curve(mask_gt_lst: list, mask_pred_lst: list, number_thresholds: int):
     """
-    Retourne la ROC curve
+    Retourne la ROC curve (protocole DiaRetDB1, image-based).
+
+    On balaie le seuil sur le score-image (= nombre de pixels predits exsudat),
+    comme dans le papier : une image est declaree anormale si son score atteint
+    le seuil. Aucun recouvrement spatial n'intervient.
+
     Args:
         mask_gt_lst: liste de masque ground truth
         mask_pred_lst : liste de masque prédit
@@ -230,14 +236,13 @@ def roc_curve(
         les points de la courbe (threshold,FPR,TPR)
     """
     labels = np.array([1 if np.count_nonzero(gt) else 0 for gt in mask_gt_lst])
-    ious = np.array(
-        [compute_iou(gt, pred) for gt, pred in zip(mask_gt_lst, mask_pred_lst)]
-    )
-    thresholds = np.linspace(0, 1, number_thresholds)
+    scores = np.array([np.count_nonzero(pred) for pred in mask_pred_lst])
+    max_score = scores.max() if len(scores) else 0
+    thresholds = np.linspace(0, max_score, number_thresholds)
     result = []
 
     for threshold in thresholds:
-        tp, fp, fn, tn = roc_curve_(labels, ious, threshold)
+        tp, fp, fn, tn = roc_curve_(labels, scores, threshold)
         FPR = false_positive_rate(fp, tn)
         TPR = sensitivity(tp, fn)
         result.append((threshold, FPR, TPR))

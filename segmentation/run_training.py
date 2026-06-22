@@ -38,6 +38,7 @@ def load_dataset_paths(img_dir: str, gt_dir: str, annotator: str = "01") -> tupl
             gt_paths.append(gt)
     return image_paths, gt_paths
 
+
 # LOAD DATASET
 image_paths, gt_paths = load_dataset_paths(IMG_DIR, GT_DIR)
 
@@ -59,7 +60,9 @@ test_gts = [gt_paths[i] for i in idx_test]
 print(f"Train : {len(train_imgs)} | Test : {len(test_imgs)}")
 
 # TRAINING
-clf = RandomForestClassifier(n_estimators=100, n_jobs=1, random_state=42, class_weight="balanced")
+clf = RandomForestClassifier(
+    n_estimators=100, n_jobs=1, random_state=42, class_weight="balanced"
+)
 print("Training...")
 clf = train(train_imgs, train_gts, clf)
 joblib.dump(clf, MODEL_OUT)

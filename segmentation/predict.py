@@ -2,7 +2,13 @@ import higra as hg
 import numpy as np
 
 
-def predict(attributes: np.ndarray, clf, threshold: float = 0.5, max_area: int = 5000, min_area: int = 4000) -> np.ndarray:
+def predict(
+    attributes: np.ndarray,
+    clf,
+    threshold: float = 0.5,
+    max_area: int = 5000,
+    min_area: int = 4000,
+) -> np.ndarray:
     """
     classifie chaque noeud
 

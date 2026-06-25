@@ -27,7 +27,6 @@ from dash import (
     State,
     ctx,
     ALL,
-    no_update,
 )
 from dash.exceptions import PreventUpdate
 
@@ -540,7 +539,17 @@ def clear_image(_n):
 def launch(_n, img, a):
     if not img or (a and a.get("running")):
         raise PreventUpdate
-    return {"running": True, "step": 0, "progress": 0, "animation_done": False, "api_called": False}, False, None
+    return (
+        {
+            "running": True,
+            "step": 0,
+            "progress": 0,
+            "animation_done": False,
+            "api_called": False,
+        },
+        False,
+        None,
+    )
 
 
 @app.callback(
@@ -587,10 +596,16 @@ def run_api_call(a, img, hist):
 
     entry = {
         "id": str(time.time()),
-        "src": img["src"], "name": img["name"],
-        "date": int(time.time() * 1000), "results": results,
+        "src": img["src"],
+        "name": img["name"],
+        "date": int(time.time() * 1000),
+        "results": results,
     }
-    return {"running": False, "step": a["step"], "progress": 100, "api_called": True}, results, [entry] + (hist or [])
+    return (
+        {"running": False, "step": a["step"], "progress": 100, "api_called": True},
+        results,
+        [entry] + (hist or []),
+    )
 
 
 @app.callback(

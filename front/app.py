@@ -251,7 +251,7 @@ server = app.server
     Input("url", "pathname"),
     Input("btn-history", "n_clicks"),
 )
-def load_history(_pathname, _n):  # ✅ deux paramètres
+def load_history(_pathname, _n):
     try:
         response = requests.get(f"{API_URL}/history")
         response.raise_for_status()

@@ -31,34 +31,27 @@ async def root():
     return {"message": "Hello World"}
 
 
-def mask_to_result(label, mask, image_shape, idx, proba=None):
+def mask_to_result(label, mask, image_shape, idx):
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return None
 
     height, width = image_shape[:2]
 
-    if width > height:
-        visible_size = height
-        offset_x = (width - height) / 2
-        offset_y = 0
-    else:
-        visible_size = width
-        offset_x = 0
-        offset_y = (height - width) / 2
+    crop_size = min(width, height)
+    x_offset = (width - crop_size) / 2
+    y_offset = (height - crop_size) / 2
 
-    x_visible = xs.mean() - offset_x
-    y_visible = ys.mean() - offset_y
+    x_in_crop = xs.mean() - x_offset
+    y_in_crop = ys.mean() - y_offset
 
-    x_pct = round(float(x_visible) / visible_size * 100, 1)
-    y_pct = round(float(y_visible) / visible_size * 100, 1)
+    x_pct = round(float(x_in_crop) / crop_size * 100, 1)
+    y_pct = round(float(y_in_crop) / crop_size * 100, 1)
 
     area = len(xs)
-    radius = round(float(np.sqrt(area / np.pi)) / visible_size * 100, 2)
+    radius = round(float(np.sqrt(area / np.pi)) / crop_size * 100, 2)
 
-    severity, exudate_type, size, confidence = classify_exudate(
-        mask, label, area, proba
-    )
+    severity, exudate_type, size, confidence = classify_exudate(mask, label, area)
 
     return {
         "id": idx,
@@ -105,12 +98,20 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
         f.write(contents)
 
     masks = segment(str(save_path), clf=clf)
+    for label, mask in masks:
+        ys, xs = np.where(mask)
+        # print(
+        #     f"label={label}, aire={len(xs)}, centre=({xs.mean():.0f}, {ys.mean():.0f})"
+        # )
 
     image = io.imread(save_path)
     image_shape = image.shape
+    print(f"Shape utilisée pour le calcul: {image_shape}")
 
     results = []
     for idx, (label, mask) in enumerate(masks, start=1):
+        if label == 0:
+            continue
         r = mask_to_result(label, mask, image_shape, idx)
         if r is not None:
             results.append(r)

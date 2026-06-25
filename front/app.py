@@ -27,7 +27,6 @@ from dash import (
     State,
     ctx,
     ALL,
-    no_update,
 )
 from dash.exceptions import PreventUpdate
 
@@ -540,50 +539,72 @@ def clear_image(_n):
 def launch(_n, img, a):
     if not img or (a and a.get("running")):
         raise PreventUpdate
-    return {"running": True, "step": 0, "progress": 0}, False, None
+    return (
+        {
+            "running": True,
+            "step": 0,
+            "progress": 0,
+            "animation_done": False,
+            "api_called": False,
+        },
+        False,
+        None,
+    )
 
 
 @app.callback(
     Output("state-analysis", "data", allow_duplicate=True),
     Output("analysis-interval", "disabled", allow_duplicate=True),
-    Output("state-results", "data", allow_duplicate=True),
-    Output("state-history", "data"),
     Input("analysis-interval", "n_intervals"),
     State("state-analysis", "data"),
+    prevent_initial_call=True,
+)
+def advance_animation(_n, a):
+    """Fait uniquement avancer le compteur d'étapes, AUCUN appel réseau ici."""
+    if not a or not a.get("running") or a.get("animation_done"):
+        raise PreventUpdate
+
+    n = len(ANALYSIS_STEPS)
+    step = a["step"] + 1
+
+    if step >= n:
+        return {**a, "step": n, "progress": 100, "animation_done": True}, True
+
+    return {**a, "step": step, "progress": round(step / n * 100)}, False
+
+
+@app.callback(
+    Output("state-analysis", "data", allow_duplicate=True),
+    Output("state-results", "data", allow_duplicate=True),
+    Output("state-history", "data"),
+    Input("state-analysis", "data"),
     State("state-image", "data"),
     State("state-history", "data"),
     prevent_initial_call=True,
 )
-def tick(_n, a, img, hist):
-    if not a or not a.get("running"):
+def run_api_call(a, img, hist):
+    """Se déclenche UNE FOIS quand l'animation atteint animation_done=True."""
+    if not a or not a.get("animation_done") or a.get("api_called"):
         raise PreventUpdate
-    n = len(ANALYSIS_STEPS)
-    step = a["step"] + 1
-    if step >= n:
-        try:
-            api_results = call_analyze_api(img["src"], img["name"])
-            results = sort_results(api_results)
-        except (requests.RequestException, ValueError) as e:
-            print(f">>> ERREUR: {e}")
-            results = []
-        entry = {
-            "id": str(time.time()),
-            "src": img["src"],
-            "name": img["name"],
-            "date": int(time.time() * 1000),
-            "results": results,
-        }
-        return (
-            {"running": False, "step": n, "progress": 100},
-            True,
-            results,
-            [entry] + (hist or []),
-        )
+
+    try:
+        api_results = call_analyze_api(img["src"], img["name"])
+        results = sort_results(api_results)
+    except Exception as e:
+        print(f">>> ERREUR: {e}")
+        results = []
+
+    entry = {
+        "id": str(time.time()),
+        "src": img["src"],
+        "name": img["name"],
+        "date": int(time.time() * 1000),
+        "results": results,
+    }
     return (
-        {"running": True, "step": step, "progress": round(step / n * 100)},
-        False,
-        no_update,
-        no_update,
+        {"running": False, "step": a["step"], "progress": 100, "api_called": True},
+        results,
+        [entry] + (hist or []),
     )
 
 

@@ -1,11 +1,15 @@
 import uuid
 from pathlib import Path
+import numpy as np
+from skimage import io
 from fastapi import FastAPI, File, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from .database import get_db, AnalysisRecord
 from fastapi.responses import FileResponse
+import joblib
 
+from segmentation.segmentation import segment
 
 app = FastAPI()
 
@@ -18,11 +22,75 @@ app.add_middleware(
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+CLF_PATH = Path("app/clf.joblib")
+clf = joblib.load(CLF_PATH)
 
 
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
+
+
+def mask_to_result(label, mask, image_shape, idx, proba=None):
+    ys, xs = np.where(mask)
+    if len(xs) == 0:
+        return None
+
+    height, width = image_shape[:2]
+
+    if width > height:
+        visible_size = height
+        offset_x = (width - height) / 2
+        offset_y = 0
+    else:
+        visible_size = width
+        offset_x = 0
+        offset_y = (height - width) / 2
+
+    x_visible = xs.mean() - offset_x
+    y_visible = ys.mean() - offset_y
+
+    x_pct = round(float(x_visible) / visible_size * 100, 1)
+    y_pct = round(float(y_visible) / visible_size * 100, 1)
+
+    area = len(xs)
+    radius = round(float(np.sqrt(area / np.pi)) / visible_size * 100, 2)
+
+    severity, exudate_type, size, confidence = classify_exudate(
+        mask, label, area, proba
+    )
+
+    return {
+        "id": idx,
+        "x": x_pct,
+        "y": y_pct,
+        "radius": radius,
+        "confidence": confidence,
+        "severity": severity,
+        "type": exudate_type,
+        "size": size,
+    }
+
+
+def classify_exudate(mask, label, area, proba=None):
+    exudate_type = "Dur"
+
+    SIZE_THRESHOLD = 300  # pixels
+    size = "Grand" if area > SIZE_THRESHOLD else "Petit"
+
+    if area < 250:
+        severity = "faible"
+    elif area < 10000:
+        severity = "modéré"
+    else:
+        severity = "élevé"
+
+    if proba is not None:
+        confidence = round(float(proba) * 100)
+    else:
+        confidence = 90
+
+    return severity, exudate_type, size, confidence
 
 
 @app.post("/analyze")
@@ -36,30 +104,16 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
     with open(save_path, "wb") as f:
         f.write(contents)
 
-    # TODO: appliquer le traitement sur content
+    masks = segment(str(save_path), clf=clf)
 
-    results = [
-        {
-            "id": 1,
-            "x": 38,
-            "y": 42,
-            "radius": 3.2,
-            "confidence": 94,
-            "severity": "modéré",
-            "type": "Mou",
-            "size": "Grand",
-        },
-        {
-            "id": 2,
-            "x": 52,
-            "y": 58,
-            "radius": 2.1,
-            "confidence": 87,
-            "severity": "modéré",
-            "type": "Dur",
-            "size": "Grand",
-        },
-    ]
+    image = io.imread(save_path)
+    image_shape = image.shape
+
+    results = []
+    for idx, (label, mask) in enumerate(masks, start=1):
+        r = mask_to_result(label, mask, image_shape, idx)
+        if r is not None:
+            results.append(r)
 
     record = AnalysisRecord(
         id=record_id,

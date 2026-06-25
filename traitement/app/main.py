@@ -100,9 +100,9 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
     masks = segment(str(save_path), clf=clf)
     for label, mask in masks:
         ys, xs = np.where(mask)
-        # print(
-        #     f"label={label}, aire={len(xs)}, centre=({xs.mean():.0f}, {ys.mean():.0f})"
-        # )
+        print(
+            f"label={label}, aire={len(xs)}, centre=({xs.mean():.0f}, {ys.mean():.0f})"
+        )
 
     image = io.imread(save_path)
     image_shape = image.shape

@@ -9,7 +9,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .database import get_db, AnalysisRecord
-from fastapi.responses import FileResponse
 import joblib
 
 from segmentation.segmentation import segment

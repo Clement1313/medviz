@@ -19,7 +19,9 @@ def make_retina_mask(image: np.ndarray, threshold: int = 10) -> np.ndarray:
     return gray > threshold
 
 
-def build_node_labels(tree, gt_mask: np.ndarray, retina_mask: np.ndarray = None, threshold: float = 0.5) -> np.ndarray:
+def build_node_labels(
+    tree, gt_mask: np.ndarray, retina_mask: np.ndarray = None, threshold: float = 0.5
+) -> np.ndarray:
     """
     Convertit un masque GT (niveau pixel) en un label binaire par noeud du maxtree.
 
@@ -44,13 +46,17 @@ def build_node_labels(tree, gt_mask: np.ndarray, retina_mask: np.ndarray = None,
 
     # nb de pixels total par noeud
     area = hg.attribute_area(tree)
-    coverage = positive_count / area # proportion de pixel masques comme exsudat dans le gt dans la composante connexe
+    coverage = (
+        positive_count / area
+    )  # proportion de pixel masques comme exsudat dans le gt dans la composante connexe
     labels = (coverage > threshold).astype(np.int32)
 
     if retina_mask is not None:
-        leaf_retina = retina_mask.reshape(-1).astype(np.float64) # flatten en place
+        leaf_retina = retina_mask.reshape(-1).astype(np.float64)  # flatten en place
         retina_count = hg.accumulate_sequential(tree, leaf_retina, hg.Accumulators.sum)
-        labels[retina_count == 0] = -1 # exclu les noeuds qui ne sont pas dans la retine (fond)
+        labels[
+            retina_count == 0
+        ] = -1  # exclu les noeuds qui ne sont pas dans la retine (fond)
 
     return labels
 
@@ -84,7 +90,12 @@ def evaluate(image_path: str, gt_mask_path: str, clf, threshold: float = 0.5) ->
     return score
 
 
-def train(image_paths: list, ground_truth_mask_paths: list, clf, max_nodes_per_image: int = 50000):
+def train(
+    image_paths: list,
+    ground_truth_mask_paths: list,
+    clf,
+    max_nodes_per_image: int = 50000,
+):
     """
     Entraîne le classifieur sur une liste d'images annotées.
 
@@ -92,7 +103,7 @@ def train(image_paths: list, ground_truth_mask_paths: list, clf, max_nodes_per_i
         image_paths: liste de chemins vers les images
         ground_truth_mask_paths: liste de chemins vers les masques GT correspondants
         clf: classifieur sklearn
-        max_nodes_per_image: nb max de noeuds échantillonnés par image 
+        max_nodes_per_image: nb max de noeuds échantillonnés par image
 
     Returns:
         clf entraîné

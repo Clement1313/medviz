@@ -30,6 +30,7 @@ clf = joblib.load(CLF_PATH)
 async def root():
     return {"message": "Hello World"}
 
+
 def mask_to_result(label, mask, image_shape, idx, proba=None):
     ys, xs = np.where(mask)
     if len(xs) == 0:
@@ -55,7 +56,9 @@ def mask_to_result(label, mask, image_shape, idx, proba=None):
     area = len(xs)
     radius = round(float(np.sqrt(area / np.pi)) / visible_size * 100, 2)
 
-    severity, exudate_type, size, confidence = classify_exudate(mask, label, area, proba)
+    severity, exudate_type, size, confidence = classify_exudate(
+        mask, label, area, proba
+    )
 
     return {
         "id": idx,

@@ -1,5 +1,6 @@
 import higra as hg
 import numpy as np
+from scipy import ndimage
 
 
 def predict(
@@ -59,17 +60,23 @@ def cut_tree(tree, labels: np.ndarray) -> np.ndarray:
 def get_connected_component_masks(mask: np.ndarray) -> list:
     """
     Convertit un masque de labels en une liste de masques binaires,
-    un par composante (label unique).
+    un par composante CONNEXE (région de pixels adjacents partageant
+    le même label), et non simplement par valeur de label.
 
     Args:
-        label_map: label de chacun des pixel / carte d'appartenance des pixels a une composante connexe
+        mask: label de chacun des pixels / carte d'appartenance
 
     Returns:
-        liste de couple (label, masque binaire)
+        liste de couples (label, masque binaire)
     """
     labels_unique = np.unique(mask)
     masks = []
     for label in labels_unique:
         binary_mask = mask == label
-        masks.append((label, binary_mask))
+        connected_components, n_components = ndimage.label(binary_mask)
+
+        for component_id in range(1, n_components + 1):
+            component_mask = connected_components == component_id
+            masks.append((label, component_mask))
+
     return masks

@@ -27,6 +27,40 @@ The CI runs on pushes and Pull Requests targeting `dev` or `main`.
 * Run Ruff linting and formatting checks.
 * Ensure that only `dev` can be merged into `main`.
 
+## CD (Docker Compose)
+
+The deployment runs only after a push on `main`, and only after the `check` and
+`lint` jobs have passed.
+
+Deployment target:
+
+```text
+main -> GitHub Actions -> SSH server -> docker compose up -d --build
+```
+
+Required GitHub repository secrets:
+
+```text
+DEPLOY_HOST      # server IP or hostname
+DEPLOY_USER      # SSH user
+DEPLOY_SSH_KEY   # private SSH key authorized on the server
+DEPLOY_PATH      # path to the cloned repository on the server
+DEPLOY_PORT      # optional, defaults to 22
+```
+
+The server must already have:
+
+* Docker with the Compose plugin
+* Git access to the repository
+* A clone of the repository at `DEPLOY_PATH`
+
+Local run:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
 ## Pre-commit
 
 Pre-commit automatically runs Ruff before each commit:

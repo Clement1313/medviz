@@ -1,10 +1,19 @@
-from sqlalchemy import create_engine, Column, String, JSON, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
+import os
 from datetime import datetime
+from pathlib import Path
 
-DATABASE_URL = "sqlite:///./retinascan.db"
+from sqlalchemy import JSON, Column, DateTime, String, create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./retinascan.db")
+
+connect_args = {}
+if DATABASE_URL.startswith("sqlite:///"):
+    database_path = Path(DATABASE_URL.replace("sqlite:///", "", 1))
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    connect_args = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 

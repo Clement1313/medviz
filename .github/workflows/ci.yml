@@ -2,9 +2,10 @@ name: MedViz CI-CD
 
 on:
   push:
-    branches: [dev, main]
+    branches: [dev]
   pull_request:
     branches: [dev, main]
+    types: [opened, synchronize, reopened, closed]
 
 jobs:
 
@@ -73,6 +74,47 @@ jobs:
           uv run ruff format --check .
           uv run ruff check .
 
+  compose:
+    runs-on: ubuntu-latest
+    needs: [check, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build and start Docker Compose stack
+        run: docker compose up -d --build
+
+      - name: Wait for services
+        run: |
+          for url in http://127.0.0.1:8000/ http://127.0.0.1:8050/; do
+            for i in {1..30}; do
+              if curl --fail --silent --show-error "$url" > /dev/null; then
+                echo "$url is ready"
+                break
+              fi
+
+              if [ "$i" -eq 30 ]; then
+                echo "$url did not become ready"
+                docker compose ps
+                exit 1
+              fi
+
+              sleep 2
+            done
+          done
+
+      - name: Show Docker Compose status
+        run: docker compose ps
+
+      - name: Show Docker Compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop Docker Compose stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
   main-pr-source:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
@@ -88,8 +130,8 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [check, lint]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, lint, compose, main-pr-source]
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.base_ref == 'main' && github.head_ref == 'dev'
 
     steps:
       - name: Install SSH key

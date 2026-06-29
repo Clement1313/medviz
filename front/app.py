@@ -138,7 +138,8 @@ def call_analyze_api(img_data_uri, filename):
     files = {"file": (filename, raw_bytes, "image/png")}
     response = requests.post(f"{API_URL}/analyze", files=files)
     response.raise_for_status()
-    return response.json()["results"]
+    data = response.json()
+    return data["results"], data["diagnosis"]
 
 
 def sort_results(data):
@@ -169,8 +170,8 @@ def build_report(results, image_name):
         "",
         "--- DÉTAIL DES DÉTECTIONS ---",
         *[
-            f"  #{i + 1}  Sévérité: {r['severity']:<6} | Type: {r['type']:<3}, {r['size']:<5} "
-            f"| Diamètre: {r['radius']:.1f} mm | Confiance: {r['confidence']}%"
+            # f"  #{i + 1}  Sévérité: {r['severity']:<6} | Type: {r['type']:<3}, {r['size']:<5} "
+            f"| Diamètre: {r['radius']:.1f} mm |"
             for i, r in enumerate(results)
         ],
         "",
@@ -304,6 +305,7 @@ app.layout = html.Div(
         dcc.Store(
             id="state-analysis", data={"running": False, "step": 0, "progress": 0}
         ),
+        dcc.Store(id="state-diagnosis"),
         dcc.Store(id="state-modal", data=False),
         dcc.Interval(id="analysis-interval", interval=450, disabled=True),
         dcc.Download(id="download-report"),
@@ -578,6 +580,7 @@ def advance_animation(_n, a):
 @app.callback(
     Output("state-analysis", "data", allow_duplicate=True),
     Output("state-results", "data", allow_duplicate=True),
+    Output("state-diagnosis", "data"),
     Output("state-history", "data"),
     Input("state-analysis", "data"),
     State("state-image", "data"),
@@ -585,16 +588,15 @@ def advance_animation(_n, a):
     prevent_initial_call=True,
 )
 def run_api_call(a, img, hist):
-    """Se déclenche UNE FOIS quand l'animation atteint animation_done=True."""
     if not a or not a.get("animation_done") or a.get("api_called"):
         raise PreventUpdate
 
     try:
-        api_results = call_analyze_api(img["src"], img["name"])
+        api_results, diagnosis = call_analyze_api(img["src"], img["name"])
         results = sort_results(api_results)
     except Exception as e:
         print(f">>> ERREUR: {e}")
-        results = []
+        results, diagnosis = [], None
 
     entry = {
         "id": str(time.time()),
@@ -602,10 +604,12 @@ def run_api_call(a, img, hist):
         "name": img["name"],
         "date": int(time.time() * 1000),
         "results": results,
+        "diagnosis": diagnosis,
     }
     return (
         {"running": False, "step": a["step"], "progress": 100, "api_called": True},
         results,
+        diagnosis,
         [entry] + (hist or []),
     )
 
@@ -662,69 +666,103 @@ def render_action(a, results, img):
     return cls, disabled, label, status
 
 
+STAGE_COLORS = {
+    "Léger / NPDR précoce": C["green"],
+    "Modéré / NPDR avancé": "#f97316",
+    "Sévère / proche PDR": C["red"],
+}
+
+
 @app.callback(
     Output("results-panel", "children"),
     Output("results-panel", "style"),
-    Input("state-results", "data"),
+    Input("state-diagnosis", "data"),
 )
-def render_results(results):
-    if not results:
+def render_diagnosis(diagnosis):
+    if not diagnosis:
         return None, {"display": "none"}
 
-    rows = []
-    for idx, ex in enumerate(results):
-        rows.append(
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Span(f"{idx + 1}.", className="row-idx"),
-                            html.Div(
-                                className="row-dot",
-                                style={
-                                    "backgroundColor": SEVERITY_COLORS[ex["severity"]]
-                                },
-                            ),
-                            html.Span(ex["severity"], className="row-sev"),
-                        ],
-                        className="row-left",
-                    ),
-                    html.Div(
-                        [
-                            html.Span(f"{ex['type']} • {ex['size']}"),
-                            html.Span(f"{ex['confidence']}%", className="row-conf"),
-                        ],
-                        className="row-right",
-                    ),
-                ],
-                className="result-row",
-            )
-        )
+    stage = diagnosis["stage"]
+    color = STAGE_COLORS.get(stage, C["s400"])
+
+    # score = max(0, min(100, int((1 - diagnosis["surface_ratio"]) * 100)))
 
     panel = html.Div(
-        [
+        className="diagnosis-card",
+        children=[
+            # Header
             html.Div(
-                [
+                className="diagnosis-header",
+                children=[
+                    html.Div([html.P("Analyse rétinienne terminée")]),
                     html.Div(
-                        [
-                            html.Span(str(len(results)), className="count-num"),
-                            html.Span("Exsudats détectés", className="count-lbl"),
-                        ],
-                        className="count-box",
-                    ),
-                    html.Button(
-                        [icon("download", 16, C["s300"]), html.Span("Exporter")],
-                        id="btn-export",
-                        className="export-btn",
-                        n_clicks=0,
+                        stage,
+                        className="diagnosis-badge",
+                        style={"background": color, "color": "white"},
                     ),
                 ],
-                className="results-head",
             ),
-            html.Div(rows, className="results-list"),
+            # Interprétation
+            html.Div(
+                className="diagnosis-section",
+                children=[
+                    html.H4("Interprétation"),
+                    html.P(diagnosis["interpretation"]),
+                ],
+            ),
+            # Score IA
+            html.Div(
+                className="diagnosis-section",
+                children=[
+                    html.Div(
+                        [
+                            # html.Div(f"{score}%", className="score-value"),
+                            # html.Div("Indice de confiance", className="score-label")
+                        ],
+                        className="score-circle",
+                    )
+                ],
+            ),
+            # Statistiques
+            html.Div(
+                className="stats-grid",
+                children=[
+                    html.Div(
+                        className="stat-card",
+                        children=[
+                            html.H5("Exsudats"),
+                            html.H2(str(diagnosis["n_exudates"])),
+                        ],
+                    ),
+                    html.Div(
+                        className="stat-card",
+                        children=[
+                            html.H5("Surface"),
+                            html.H2(f"{diagnosis['surface_ratio'] * 100:.2f}%"),
+                        ],
+                    ),
+                    # html.Div(
+                    #     className="stat-card",
+                    #     children=[
+                    #         html.H5("Stade"),
+                    #         html.H2(stage, style={"color": color})
+                    #     ]
+                    # ),
+                ],
+            ),
+            # Recommandation
+            # html.Div(
+            #     className="recommendation-box",
+            #     children=[
+            #         html.H4("Recommandation"),
+            #         html.P(
+            #             "Une consultation ophtalmologique est recommandée afin de confirmer le diagnostic et définir la prise en charge adaptée."
+            #         )
+            #     ]
+            # )
         ],
-        className="results-card",
     )
+
     return panel, {"display": "block"}
 
 
@@ -849,6 +887,7 @@ def render_history(hist):
 @app.callback(
     Output("state-image", "data", allow_duplicate=True),
     Output("state-results", "data", allow_duplicate=True),
+    Output("state-diagnosis", "data", allow_duplicate=True),
     Output("state-zoom", "data", allow_duplicate=True),
     Output("state-modal", "data", allow_duplicate=True),
     Input({"type": "hist-item", "id": ALL}, "n_clicks"),
@@ -862,8 +901,14 @@ def restore_history(clicks, hist):
     item = next((h for h in (hist or []) if h["id"] == tid), None)
     if not item:
         raise PreventUpdate
-    img_url = f"{PUBLIC_API_URL}/history/{item['id']}/image"
-    return {"src": img_url, "name": item["name"]}, item["results"], 1, False
+    img_url = f"{API_URL}/history/{item['id']}/image"
+    return (
+        {"src": img_url, "name": item["name"]},
+        item["results"],
+        item.get("diagnosis"),
+        1,
+        False,
+    )
 
 
 if __name__ == "__main__":

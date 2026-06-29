@@ -97,7 +97,7 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
     with open(save_path, "wb") as f:
         f.write(contents)
 
-    masks = segment(str(save_path), clf=clf)
+    masks = segment(str(save_path), clf=clf, threshold=0.95)
     # print(f">>> Nombre de masques retournés par segment(): {len(masks)}")
     # for label, mask in masks:
     #     print(f"   label={label}, aire={mask.sum()}, bbox=({np.where(mask)[1].min()}-{np.where(mask)[1].max()}, {np.where(mask)[0].min()}-{np.where(mask)[0].max()})")

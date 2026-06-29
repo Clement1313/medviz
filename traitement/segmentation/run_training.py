@@ -1,10 +1,3 @@
-# /// script
-# dependencies = [
-#   "scikit-learn",
-#   "joblib",
-# ]
-# ///
-
 import os
 import sys
 import joblib
@@ -16,12 +9,27 @@ sys.path.insert(0, os.path.dirname(__file__))
 from training import train
 
 
-DB_DIR = os.path.join(os.path.dirname(__file__), "..", "ddb1_v02_01")
+# racine du projet (deux niveaux au-dessus de segmentation/)
+PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
+# dataset DiaRetDB1 place a la racine du projet (contient images/ et groundtruth/)
+DB_DIR = os.path.join(PROJECT_ROOT, "database")
 IMG_DIR = os.path.join(DB_DIR, "images")
 GT_DIR = os.path.join(DB_DIR, "groundtruth")
-MODEL_OUT = os.path.join(os.path.dirname(__file__), "clf.joblib")
+# le modele est ecrit la ou l'API le charge (traitement/app/clf.joblib)
+MODEL_OUT = os.path.join(os.path.dirname(__file__), "..", "app", "clf.joblib")
 
 LIMIT = None  # mettre une limite seulement si on veut tester rapidement
+# nb de negatifs gardes par positif. 10 = iterations rapides ;
+# 20 = config finale (plus de hard negatives -> moins de faux positifs).
+NEG_RATIO = 20
+N_ESTIMATORS = 100  # baisser (ex. 50) pour un fit plus rapide en phase de diagnostic
+# taille min d'une feuille : limite la taille du modele (sinon plusieurs Go) et
+# regularise. Monter (ex. 100) si le clf.joblib est encore trop gros.
+MIN_SAMPLES_LEAF = 50
+# GT d'entrainement : union des 4 annotateurs (apprend les lesions faibles vues
+# par d'autres experts que le 01 -> meilleure sensibilite). Doit matcher l'eval.
+USE_ANNOTATOR_UNION = True
+ANNOTATORS = ("01", "02", "03", "04")
 
 
 def load_dataset_paths(img_dir: str, gt_dir: str, annotator: str = "01") -> tuple:
@@ -60,10 +68,26 @@ test_gts = [gt_paths[i] for i in idx_test]
 print(f"Train : {len(train_imgs)} | Test : {len(test_imgs)}")
 
 # TRAINING
+# n_jobs=-1 : entraine les arbres sur tous les coeurs (8 sur un M2) -> fit bien
+# plus rapide, sans effet sur la qualite.
+# min_samples_leaf : empeche les arbres de pousser jusqu'a 1 echantillon/feuille.
+# Sans lui, sur des millions d'echantillons le modele atteint plusieurs Go ;
+# il regularise aussi (moins d'overfit -> potentiellement moins de FP).
 clf = RandomForestClassifier(
-    n_estimators=100, n_jobs=1, random_state=42, class_weight="balanced"
+    n_estimators=N_ESTIMATORS,
+    n_jobs=-1,
+    random_state=42,
+    class_weight="balanced",
+    min_samples_leaf=MIN_SAMPLES_LEAF,
 )
 print("Training...")
-clf = train(train_imgs, train_gts, clf)
+clf = train(
+    train_imgs,
+    train_gts,
+    clf,
+    neg_ratio=NEG_RATIO,
+    use_union=USE_ANNOTATOR_UNION,
+    annotators=ANNOTATORS,
+)
 joblib.dump(clf, MODEL_OUT)
 print(f"Model saved in {MODEL_OUT}")

@@ -1,12 +1,14 @@
+import os
 import uuid
 from pathlib import Path
 import numpy as np
 from skimage import io
 from fastapi import FastAPI, File, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from .database import get_db, AnalysisRecord
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from .database import get_db, AnalysisRecord
 import joblib
 
 from segmentation.segmentation import segment
@@ -20,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads"))
 UPLOAD_DIR.mkdir(exist_ok=True)
 CLF_PATH = Path("app/clf.joblib")
 clf = joblib.load(CLF_PATH)
@@ -126,7 +128,7 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
     with open(save_path, "wb") as f:
         f.write(contents)
 
-    masks = segment(str(save_path), clf=clf)
+    masks = segment(str(save_path), clf=clf, threshold=0.95)
     # print(f">>> Nombre de masques retournés par segment(): {len(masks)}")
     # for label, mask in masks:
     #     print(f"   label={label}, aire={mask.sum()}, bbox=({np.where(mask)[1].min()}-{np.where(mask)[1].max()}, {np.where(mask)[0].min()}-{np.where(mask)[0].max()})")

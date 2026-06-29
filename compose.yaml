@@ -1,0 +1,30 @@
+services:
+  traitement:
+    build:
+      context: ./traitement
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: sqlite:////app/storage/retinascan.db
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - traitement-db:/app/storage
+      - traitement-uploads:/app/uploads
+    ports:
+      - "${TRAITEMENT_PORT:-8000}:8000"
+
+  front:
+    build:
+      context: ./front
+    restart: unless-stopped
+    environment:
+      API_URL: http://traitement:8000
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://127.0.0.1:8000}
+      PORT: 8050
+    ports:
+      - "${FRONT_PORT:-8050}:8050"
+    depends_on:
+      - traitement
+
+volumes:
+  traitement-db:
+  traitement-uploads:

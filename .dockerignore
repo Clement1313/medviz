@@ -1,0 +1,11 @@
+.git
+.github
+.ruff_cache
+.pytest_cache
+__pycache__
+*.pyc
+.venv
+retinascan.db
+uploads
+traitement/retinascan.db
+traitement/uploads

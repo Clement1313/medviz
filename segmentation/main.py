@@ -3,7 +3,7 @@ import os
 import joblib
 import numpy as np
 from skimage import io
-
+import matplotlib.pyplot as plt
 from segmentation import segment
 from evaluation import (
     load_mask,
@@ -13,6 +13,7 @@ from evaluation import (
     false_positive_rate,
     false_negative_rate,
     weighted_error_rate,
+    roc_curve,
 )
 
 # dossier racine du dataset DiaRetDB1
@@ -21,7 +22,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_HERE))
 DATA_DIR = os.path.join(_REPO_ROOT, "ddb1_v02_01")
 CLF_PATH = os.path.join(_HERE, "clf.joblib")  # modèle pré-entraîné
-N_TEST = 50  # nb d'images de test
+N_TEST = 60  # nb d'images de test
 
 
 def parse_split(data_dir: str, split_file: str) -> list:
@@ -66,7 +67,7 @@ def main():
         # print(f"  {os.path.basename(img)} : IoU={compute_iou(mask_gt, mask_pred):.4f}")
 
     # protocole DiaRetDB1 : matrice de confusion au niveau IMAGE
-    tp, fp, fn, tn = confusionCounts(mask_gt_lst, mask_pred_lst, min_pixels=1)
+    tp, fp, fn, tn = confusionCounts(mask_gt_lst, mask_pred_lst, min_pixels=15)
     print(f"\nConfusion (image-based) : TP={tp} FP={fp} FN={fn} TN={tn}")
 
     if tp + fn > 0:
@@ -82,13 +83,11 @@ def main():
         fnr = false_negative_rate(fn, tp)
         print(f"WER(R=10) = {weighted_error_rate(fpr, fnr, R=10):.3f}")
 
-    """
     # --- affichage matplotlib : matrice de confusion + courbe ROC ---
     _, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     # matrice de confusion (lignes = vérité, colonnes = prédiction)
-    cm = np.array([[tp, fn],
-                   [fp, tn]])
+    cm = np.array([[tp, fn], [fp, tn]])
     ax = axes[0]
     ax.imshow(cm, cmap="Blues")
     ax.set_xticks([0, 1], ["anormale", "normale"])
@@ -115,9 +114,13 @@ def main():
         ax.set_title("Courbe ROC (DiaRetDB1, image-based)")
         ax.legend()
     else:
-        ax.text(0.5, 0.5,
-                "ROC indisponible\n(le test doit mélanger\nimages normales et anormales)",
-                ha="center", va="center")
+        ax.text(
+            0.5,
+            0.5,
+            "ROC indisponible\n(le test doit mélanger\nimages normales et anormales)",
+            ha="center",
+            va="center",
+        )
         ax.axis("off")
 
     plt.tight_layout()
@@ -125,7 +128,6 @@ def main():
     plt.savefig(out, dpi=100)
     print(f"\nFigure sauvegardée → {out}")
     plt.show()
-    """
 
 
 if __name__ == "__main__":

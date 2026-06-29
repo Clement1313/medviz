@@ -1,0 +1,167 @@
+name: MedViz CI-CD
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Check front
+        working-directory: front
+        run: |
+          uv sync
+          uv run python -c "import app; print('front ok')"
+
+      - name: Check data
+        working-directory: data
+        run: |
+          uv sync
+          uv run python -c "from app.main import app; print('data ok')"
+
+      - name: Check traitement
+        working-directory: traitement
+        run: |
+          uv sync
+          uv run python -c "from app.main import app; print('traitement ok')" 
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Lint front
+        working-directory: front
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Lint data
+        working-directory: data
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Lint traitement
+        working-directory: traitement
+        run: |
+          uv sync
+          uv run ruff format --check .
+          uv run ruff check .
+
+  compose:
+    runs-on: ubuntu-latest
+    needs: [check, lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build and start Docker Compose stack
+        run: docker compose up -d --build
+
+      - name: Wait for services
+        run: |
+          for url in http://127.0.0.1:8000/ http://127.0.0.1:8050/; do
+            for i in {1..30}; do
+              if curl --fail --silent --show-error "$url" > /dev/null; then
+                echo "$url is ready"
+                break
+              fi
+
+              if [ "$i" -eq 30 ]; then
+                echo "$url did not become ready"
+                docker compose ps
+                exit 1
+              fi
+
+              sleep 2
+            done
+          done
+
+      - name: Show Docker Compose status
+        run: docker compose ps
+
+      - name: Show Docker Compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop Docker Compose stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  main-pr-source:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    steps:
+      - name: Only dev can be merged into main
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "Only the dev branch can open a pull request into main."
+            echo "Current source branch: ${{ github.head_ref }}"
+            exit 1
+          fi
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [check, lint, compose, main-pr-source]
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.base_ref == 'main' && github.head_ref == 'dev'
+
+    steps:
+      - name: Install SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Add server to known hosts
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+        run: |
+          ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy with Docker Compose
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" << EOF
+            set -e
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            docker compose up -d --build
+            docker image prune -f
+          EOF

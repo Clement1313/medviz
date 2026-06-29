@@ -1,0 +1,19 @@
+[project]
+name = "traitement"
+version = "0.1.0"
+description = "traitement service dependencies"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.136.3",
+    "higra>=0.6.13",
+    "joblib>=1.5.3",
+    "numpy>=2.5.0",
+    "scikit-image>=0.26.0",
+    "scikit-learn>=1.9.0",
+    "sqlalchemy>=2.0.51",
+]
+[dependency-groups]
+dev = [
+    "ruff>=0.15.17",
+]

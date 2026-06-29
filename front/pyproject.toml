@@ -1,0 +1,19 @@
+[project]
+name = "retinascan-dash"
+version = "0.1.0"
+description = "frontend service dependencies"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "dash>=2.16",
+    "requests>=2.32.5",
+    "ruff>=0.15.18",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.17",
+]

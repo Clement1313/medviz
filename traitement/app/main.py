@@ -44,6 +44,18 @@ def compute_diagnosis(masks, image_shape):
     n_exudates = len(masks)
     surface_ratio = exudates_area / retina_area if retina_area > 0 else 0
 
+    if n_exudates == 0:
+        return {
+            "n_exudates": 0,
+            "surface_ratio": 0.0,
+            "stage": "Indéterminé",
+            "interpretation": (
+                "Aucun exsudat détecté. Le stade de NPDR ne peut pas être "
+                "déterminé : l'absence de détection ne garantit pas l'absence "
+                "de lésions, le détecteur a pu en manquer."
+            ),
+        }
+
     if surface_ratio >= 0.05:
         stage = "Sévère / proche PDR"
         interpretation = "Forte accumulation d'exsudats, atteinte rétinienne importante"

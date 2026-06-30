@@ -648,7 +648,7 @@ def render_action(a, results, img):
             ],
             className="progress-wrap",
         )
-    elif results:
+    elif a and a.get("api_called"):
         status = html.Div(
             [
                 icon("check", 16, C["green"]),

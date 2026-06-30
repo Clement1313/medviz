@@ -55,7 +55,7 @@ def main():
         image = io.imread(img)
         h, w = image.shape[:2]
         mask_pred = np.zeros((h, w), dtype=np.int32)
-        for label, binary_mask in segment(img, clf):
+        for label, binary_mask in segment(img, clf, 0.99):
             mask_pred[binary_mask] = label
         mask_gt = load_mask(gt, shape=(h, w))
 
@@ -67,7 +67,7 @@ def main():
         # print(f"  {os.path.basename(img)} : IoU={compute_iou(mask_gt, mask_pred):.4f}")
 
     # protocole DiaRetDB1 : matrice de confusion au niveau IMAGE
-    tp, fp, fn, tn = confusionCounts(mask_gt_lst, mask_pred_lst, min_pixels=15)
+    tp, fp, fn, tn = confusionCounts(mask_gt_lst, mask_pred_lst)
     print(f"\nConfusion (image-based) : TP={tp} FP={fp} FN={fn} TN={tn}")
 
     if tp + fn > 0:

@@ -1,7 +1,11 @@
+import os
 import xml.etree.ElementTree as ET
 
 import numpy as np
+from scipy import ndimage
 from skimage import draw
+
+IOU_THRESHOLD = 0.5
 
 # taille standard des images DiaRetDB1 (hauteur, largeur)
 DIARETDB1_SHAPE = (1152, 1500)
@@ -74,6 +78,43 @@ def load_mask(path: str, shape: tuple = DIARETDB1_SHAPE) -> np.ndarray:
     return mask
 
 
+def load_mask_union(
+    gt_dir: str,
+    stem: str,
+    shape: tuple = DIARETDB1_SHAPE,
+    annotators: tuple = ("01", "02", "03", "04"),
+) -> np.ndarray:
+    """
+    Ground truth plus complet : UNION des marquages exsudats de TOUS les
+    annotateurs DiaRetDB1 (et non du seul annotateur 01).
+
+    DiaRetDB1 est annote par 4 experts ; un exsudat vu par l'un mais pas par
+    l'autre, si on ne lit que l'annotateur 01, devient un faux "FP" (l'image est
+    declaree saine a tort). En unionnant, une image n'est consideree saine que si
+    AUCUN expert n'y a marque d'exsudat -> metriques niveau image honnetes.
+
+    Les marquages qui se recouvrent (meme lesion vue par plusieurs experts) sont
+    fusionnes par etiquetage en composantes connexes, pour ne pas gonfler n_gt.
+
+    Args:
+        gt_dir:     dossier des annotations
+        stem:       nom de base de l'image (sans extension)
+        shape:      (H, W) du masque
+        annotators: suffixes d'annotateurs a unionner
+
+    Returns:
+        mask: (H, W) int32, un label par lesion (union), 0 = fond
+    """
+    union = np.zeros(shape, dtype=bool)
+    for a in annotators:
+        path = os.path.join(gt_dir, f"{stem}_{a}.xml")
+        if os.path.exists(path):
+            union |= load_mask(path, shape) > 0
+
+    labeled, _ = ndimage.label(union)
+    return labeled.astype(np.int32)
+
+
 def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     """
     Calcule le IoU entre un masque prédit et le ground truth.
@@ -92,6 +133,56 @@ def compute_iou(mask_gt: np.ndarray, mask_pred: np.ndarray) -> float:
     if u_rate == 0:
         return 1.0
     return i_rate / u_rate
+
+
+def lesion_detection_counts(
+    gt_mask: np.ndarray, pred_components: list, min_overlap: int = 1
+) -> tuple:
+    """
+    Matching detection au NIVEAU LESION (et non IoU pixel a pixel).
+
+    Le IoU pixel est inadapte ici : les annotations DiaRetDB1 sont de larges
+    cercles / ellipses / polygones couvrant largement plus que la surface reelle
+    de l'exsudat. Une detection fine et correcte aurait donc un IoU tres faible.
+    On compte donc des detections, pas des recouvrements exacts :
+
+      - une region GT est "detectee" si au moins une composante predite la
+        recouvre (>= min_overlap pixels) ;
+      - une composante predite est un vrai positif si elle recouvre au moins une
+        region GT, un faux positif sinon.
+
+    Args:
+        gt_mask: (H, W) int, un label entier distinct par region GT, 0 = fond
+        pred_components: liste de masques binaires predits (composantes exsudat)
+        min_overlap: nb min de pixels de recouvrement pour valider un hit
+
+    Returns:
+        (n_gt, tp_lesion, fn_lesion, tp_det, fp_det)
+          n_gt:       nb de regions GT
+          tp_lesion:  nb de regions GT detectees
+          fn_lesion:  nb de regions GT manquees
+          tp_det:     nb de composantes predites qui tombent sur une region GT
+          fp_det:     nb de composantes predites hors de toute region GT
+    """
+    gt_labels = np.unique(gt_mask)
+    gt_labels = gt_labels[gt_labels != 0]
+    n_gt = int(gt_labels.size)
+
+    detected = set()
+    tp_det = fp_det = 0
+
+    for comp in pred_components:
+        vals, counts = np.unique(gt_mask[comp], return_counts=True)
+        hit_labels = vals[(vals != 0) & (counts >= min_overlap)]
+        if hit_labels.size > 0:
+            tp_det += 1
+            detected.update(hit_labels.tolist())
+        else:
+            fp_det += 1
+
+    tp_lesion = len(detected)
+    fn_lesion = n_gt - tp_lesion
+    return n_gt, tp_lesion, fn_lesion, tp_det, fp_det
 
 
 def confusionCounts(mask_gt_lst: list, mask_pred_lst: list, min_pixels: int = 1):
@@ -126,7 +217,6 @@ def confusionCounts(mask_gt_lst: list, mask_pred_lst: list, min_pixels: int = 1)
         else:  # GT anormale, methode normale
             fn += 1
     return tp, fp, fn, tn
-
 
 def sensitivity(tp: int, fn: int) -> float:
     """

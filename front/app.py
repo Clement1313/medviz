@@ -111,7 +111,6 @@ MOCK_EXUDATES = [
 ANALYSIS_STEPS = [
     "Prétraitement de l'image...",
     "Segmentation rétinienne...",
-    "Détection des vaisseaux...",
     "Analyse des anomalies...",
     "Localisation des exsudats...",
     "Calcul des confidences...",

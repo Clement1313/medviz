@@ -74,9 +74,29 @@ jobs:
           uv run ruff format --check .
           uv run ruff check .
 
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install traitement dependencies
+        working-directory: traitement
+        run: uv sync
+
+      - name: Run unittest suite
+        run: traitement/.venv/bin/python -m unittest discover -s test_suite
+
   compose:
     runs-on: ubuntu-latest
-    needs: [check, lint]
+    needs: [check, lint, tests]
 
     steps:
       - name: Checkout code
@@ -117,20 +137,27 @@ jobs:
 
   main-pr-source:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
 
     steps:
       - name: Only dev can be merged into main
         run: |
-          if [ "${{ github.head_ref }}" != "dev" ]; then
+          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+
+          echo "Base branch: $BASE_BRANCH"
+          echo "Head branch: $HEAD_BRANCH"
+
+          if [ "$BASE_BRANCH" = "main" ] && [ "$HEAD_BRANCH" != "dev" ]; then
             echo "Only the dev branch can open a pull request into main."
-            echo "Current source branch: ${{ github.head_ref }}"
+            echo "Current source branch: $HEAD_BRANCH"
             exit 1
           fi
 
+          echo "Branch rule OK."
+
   deploy:
     runs-on: ubuntu-latest
-    needs: [check, lint, compose, main-pr-source]
+    needs: [check, lint, tests, compose, main-pr-source]
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.base_ref == 'main' && github.head_ref == 'dev'
 
     steps:

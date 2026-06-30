@@ -33,6 +33,47 @@ async def root():
     return {"message": "Hello World"}
 
 
+def compute_diagnosis(masks, image_shape):
+    height, width = image_shape[:2]
+
+    crop_size = min(width, height)
+    retina_area = np.pi * (crop_size / 2) ** 2
+
+    exudates_area = sum(mask.sum() for _, mask in masks)
+
+    n_exudates = len(masks)
+    surface_ratio = exudates_area / retina_area if retina_area > 0 else 0
+
+    if n_exudates == 0:
+        return {
+            "n_exudates": 0,
+            "surface_ratio": 0.0,
+            "stage": "Indéterminé",
+            "interpretation": (
+                "Aucun exsudat détecté. Le stade de NPDR ne peut pas être "
+                "déterminé : l'absence de détection ne garantit pas l'absence "
+                "de lésions, le détecteur a pu en manquer."
+            ),
+        }
+
+    if surface_ratio >= 0.05:
+        stage = "Sévère / proche PDR"
+        interpretation = "Forte accumulation d'exsudats, atteinte rétinienne importante"
+    elif surface_ratio >= 0.01:
+        stage = "Modéré / NPDR avancé"
+        interpretation = "Progression visible des dépôts lipidiques"
+    else:
+        stage = "Léger / NPDR précoce"
+        interpretation = "Peu d'exsudats, petites lésions localisées"
+
+    return {
+        "n_exudates": n_exudates,
+        "surface_ratio": round(surface_ratio, 4),
+        "stage": stage,
+        "interpretation": interpretation,
+    }
+
+
 def mask_to_result(label, mask, image_shape, idx):
     ys, xs = np.where(mask)
     if len(xs) == 0:
@@ -99,28 +140,36 @@ async def analyze_image(file: UploadFile = File(...), db: Session = Depends(get_
     with open(save_path, "wb") as f:
         f.write(contents)
 
-    masks = segment(str(save_path), clf=clf)
+    masks = segment(str(save_path), clf=clf, threshold=0.95)
+    # print(f">>> Nombre de masques retournés par segment(): {len(masks)}")
+    # for label, mask in masks:
+    #     print(f"   label={label}, aire={mask.sum()}, bbox=({np.where(mask)[1].min()}-{np.where(mask)[1].max()}, {np.where(mask)[0].min()}-{np.where(mask)[0].max()})")
 
     image = io.imread(save_path)
     image_shape = image.shape
 
     results = []
+    exudate_masks = []
     for idx, (label, mask) in enumerate(masks, start=1):
         if label == 0:
             continue
+        exudate_masks.append((label, mask))
         r = mask_to_result(label, mask, image_shape, idx)
         if r is not None:
             results.append(r)
+
+    diagnosis = compute_diagnosis(exudate_masks, image_shape)
 
     record = AnalysisRecord(
         id=record_id,
         filename=file.filename,
         image_path=str(save_path),
         results=results,
+        diagnosis=diagnosis,
     )
     db.add(record)
     db.commit()
-    return {"id": record_id, "results": results}
+    return {"id": record_id, "results": results, "diagnosis": diagnosis}
 
 
 @app.get("/history")
@@ -132,6 +181,7 @@ def get_history(db: Session = Depends(get_db)):
             "name": r.filename,
             "date": int(r.created_at.timestamp() * 1000),
             "results": r.results,
+            "diagnosis": r.diagnosis,
         }
         for r in records
     ]

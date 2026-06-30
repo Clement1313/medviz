@@ -20,11 +20,11 @@ Base = declarative_base()
 
 class AnalysisRecord(Base):
     __tablename__ = "analyses"
-
-    id = Column(String, primary_key=True)  # uuid
-    filename = Column(String, nullable=False)  # nom original
-    image_path = Column(String, nullable=False)  # chemin sur disque
-    results = Column(JSON, nullable=False)  # liste d'exsudats
+    id = Column(String, primary_key=True)
+    filename = Column(String, nullable=False)
+    image_path = Column(String, nullable=False)
+    results = Column(JSON, nullable=False)
+    diagnosis = Column(JSON, nullable=True)  # nouveau champ
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

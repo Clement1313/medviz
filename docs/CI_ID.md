@@ -25,6 +25,7 @@ The CI runs on pushes to `dev` and Pull Requests targeting `dev` or `main`.
 
 * Verify that services can be installed and imported.
 * Run Ruff linting and formatting checks.
+* Run the Python unittest suite from `test_suite/`.
 * Build and start the Docker Compose stack with `docker compose up -d --build`.
 * Ensure that only `dev` can be merged into `main`.
 
@@ -45,7 +46,7 @@ is not `dev`.
 ## CD (Docker Compose)
 
 The deployment runs only after a Pull Request from `dev` to `main` has been
-merged, and only after the `check`, `lint`, `compose`, and `main-pr-source` jobs
+merged, and only after the `check`, `lint`, `tests`, `compose`, and `main-pr-source` jobs
 have passed.
 
 Deployment target:

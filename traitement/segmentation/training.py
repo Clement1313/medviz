@@ -1,22 +1,59 @@
+import os
+
 import higra as hg
 import numpy as np
-from skimage import io, color
+from skimage import io
+from skimage.filters import threshold_otsu
 
-from evaluation import load_mask, compute_iou
-from segmentation import segment
-from maxtree import build_maxtree, compute_attributes
+try:
+    from .evaluation import load_mask, load_mask_union, compute_iou
+    from .segmentation import segment
+    from .maxtree import build_maxtree, compute_attributes
+    from .preprocessing import make_retina_mask
+except ImportError:  # execution "a plat" (run_training depuis le dossier segmentation)
+    from evaluation import load_mask, load_mask_union, compute_iou
+    from segmentation import segment
+    from maxtree import build_maxtree, compute_attributes
+    from preprocessing import make_retina_mask
 
 
-def make_retina_mask(image: np.ndarray, threshold: int = 10) -> np.ndarray:
+def refine_gt_by_intensity(gt_mask: np.ndarray, image_gray: np.ndarray) -> np.ndarray:
     """
-    Génère un masque booléen du champ visuel (retina) par seuillage.
-    Les pixels hors rétine sont quasi-noirs sur les 3 canaux.
+    Resserre un masque GT grossier autour des vrais exsudats par l'intensite.
+
+    Les annotations DiaRetDB1 sont de larges cercles couvrant ~10x la surface
+    reelle de l'exsudat : sans correction, la majorite des pixels marques
+    "exsudat" sont en fait de la retine normale, ce qui apprend au classifieur a
+    detecter n'importe quelle structure brillante -> precision catastrophique.
+
+    Un exsudat etant clair, on separe (Otsu) le brillant du fond UNIQUEMENT
+    parmi les pixels situes dans les cercles GT, sur le meme gris rehausse
+    (vert + CLAHE) que celui du maxtree. On ne garde positifs que les pixels a la
+    fois dans un cercle ET au-dessus du seuil.
+
+    Args:
+        gt_mask:    (H, W) int, un label par region GT, 0 = fond
+        image_gray: (H, W) gris rehausse (sortie de build_maxtree)
+
+    Returns:
+        gt_mask resserre (memes labels, mais restreint aux pixels brillants)
     """
-    if image.ndim == 3:
-        gray = (color.rgb2gray(image) * 255).astype(np.uint8)
-    else:
-        gray = image
-    return gray > threshold
+    inside = gt_mask > 0
+    if not inside.any():
+        return gt_mask
+
+    vals = image_gray[inside]
+    if vals.max() == vals.min():
+        return gt_mask  # rien a separer
+
+    thr = threshold_otsu(vals)
+    bright = image_gray > thr  # convention skimage : separation par image > seuil
+
+    refined = np.where(inside & bright, gt_mask, 0)
+    # garde-fou : si Otsu vide tout (ex. cercles peu contrastes), on garde le GT brut
+    if not refined.any():
+        return gt_mask
+    return refined
 
 
 def build_node_labels(
@@ -94,16 +131,32 @@ def train(
     image_paths: list,
     ground_truth_mask_paths: list,
     clf,
-    max_nodes_per_image: int = 50000,
+    neg_ratio: int = 20,
+    max_neg_no_positive: int = 5000,
+    use_union: bool = False,
+    annotators: tuple = ("01", "02", "03", "04"),
 ):
     """
     Entraîne le classifieur sur une liste d'images annotées.
+
+    Deux choix d'echantillonnage, cles pour la qualite :
+      - on garde TOUS les noeuds positifs (rares) et on sous-echantillonne les
+        negatifs (un tirage uniforme jetait l'essentiel du signal positif) ;
+      - les negatifs sont des HARD NEGATIVES : on les tire ponderes par leur
+        intensite (altitude du noeud max-tree). Un tirage uniforme est domine par
+        du fond sombre "facile" ; le modele n'apprend alors jamais qu'une
+        structure brillante peut NE PAS etre un exsudat (reflets, bords de
+        vaisseaux, texture rehaussee par CLAHE) -> precision catastrophique.
+        Comme un negatif est par definition hors des cercles GT, ce tirage revient
+        a cibler les "structures brillantes hors GT" (le masque sert donc bien,
+        mais uniquement a l'entrainement -> aucune fuite vers l'evaluation).
 
     Args:
         image_paths: liste de chemins vers les images
         ground_truth_mask_paths: liste de chemins vers les masques GT correspondants
         clf: classifieur sklearn
-        max_nodes_per_image: nb max de noeuds échantillonnés par image
+        neg_ratio: nb de negatifs conserves par positif (par image)
+        max_neg_no_positive: nb de negatifs conserves pour une image sans exsudat
 
     Returns:
         clf entraîné
@@ -111,15 +164,30 @@ def train(
     X_list, y_list = [], []
     rng = np.random.default_rng(42)
 
-    for image_path, gt_path in zip(image_paths, ground_truth_mask_paths):
+    n_total = len(image_paths)
+    for i, (image_path, gt_path) in enumerate(
+        zip(image_paths, ground_truth_mask_paths), start=1
+    ):
+        print(f"  features {i}/{n_total} : {os.path.basename(image_path)}", flush=True)
         image = io.imread(image_path)
 
-        tree, altitudes, image_gray, graph = build_maxtree(image)
+        tree, altitudes, image_gray, graph, image_color = build_maxtree(image)
         attributes = compute_attributes(
-            tree, altitudes, image_gray, graph
-        )  # X: (nb_noeuds, 5)
+            tree, altitudes, image_gray, graph, image_color
+        )  # X: (nb_noeuds, nb_features)
 
-        gt_mask = load_mask(gt_path, shape=image.shape[:2])  # (H, W) multi-label
+        # GT : union des annotateurs (apprend aussi les lesions faibles vues par
+        # d'autres experts que le 01) ou annotateur 01 seul
+        if use_union:
+            gt_dir = os.path.dirname(gt_path)
+            stem = os.path.basename(image_path).replace(".png", "")
+            gt_mask = load_mask_union(
+                gt_dir, stem, shape=image.shape[:2], annotators=annotators
+            )
+        else:
+            gt_mask = load_mask(gt_path, shape=image.shape[:2])  # (H, W) multi-label
+        # resserre les cercles GT autour des pixels reellement brillants (exsudats)
+        gt_mask = refine_gt_by_intensity(gt_mask, image_gray)
         retina_mask = make_retina_mask(image)
         labels = build_node_labels(tree, gt_mask, retina_mask)  # y: (nb_noeuds,)
 
@@ -127,13 +195,26 @@ def train(
         valid = labels >= 0
         attributes = attributes[valid]
         labels = labels[valid]
+        node_altitudes = altitudes[valid]  # intensite par noeud (pour hard negatives)
 
-        # subsampling
-        n = len(labels)
-        if n > max_nodes_per_image:
-            idx = rng.choice(n, size=max_nodes_per_image, replace=False)
-            attributes = attributes[idx]
-            labels = labels[idx]
+        # subsampling : on garde tous les positifs, on echantillonne les negatifs
+        pos_idx = np.flatnonzero(labels == 1)
+        neg_idx = np.flatnonzero(labels == 0)
+
+        if len(pos_idx) > 0:
+            max_neg = len(pos_idx) * neg_ratio
+        else:
+            max_neg = max_neg_no_positive
+
+        if len(neg_idx) > max_neg:
+            # hard negatives : proba de tirage croissante avec l'intensite du noeud
+            weights = node_altitudes[neg_idx].astype(np.float64) + 1.0
+            probs = weights / weights.sum()
+            neg_idx = rng.choice(neg_idx, size=max_neg, replace=False, p=probs)
+
+        keep = np.concatenate([pos_idx, neg_idx])
+        attributes = attributes[keep]
+        labels = labels[keep]
 
         X_list.append(attributes)
         y_list.append(labels)

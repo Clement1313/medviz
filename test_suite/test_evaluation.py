@@ -1,8 +1,16 @@
 import unittest
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from traitement.segmentation.evaluation import *
+
+import numpy as np
+from traitement.segmentation.evaluation import (
+    compute_iou,
+    confusionCounts,
+    false_negative_rate,
+    false_positive_rate,
+    sensitivity,
+    specificity,
+    weighted_error_rate,
+)
+
 
 class TestEvaluationUnitaires(unittest.TestCase):
     def test_iou_perfect_match(self):
@@ -38,6 +46,7 @@ class TestEvaluationUnitaires(unittest.TestCase):
     def test_weighted_error_rate(self):
         self.assertAlmostEqual(weighted_error_rate(0.1, 0.2, 10), 2.1 / 11)
 
+
 class TestEvaluationFonctionnels(unittest.TestCase):
     def test_confusion_counts_all_tp(self):
         mask_gt = [np.ones((2, 2))]
@@ -62,5 +71,7 @@ class TestEvaluationFonctionnels(unittest.TestCase):
         mask_pred = [np.ones((2, 2))]
         tp, fp, fn, tn = confusionCounts(mask_gt, mask_pred)
         self.assertEqual((tp, fp, fn, tn), (0, 1, 0, 0))
-if __name__ == '__main__':
+
+
+if __name__ == "__main__":
     unittest.main()
